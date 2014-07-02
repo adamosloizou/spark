@@ -38,7 +38,7 @@ private[spark] class JavaSerializationStream(out: OutputStream, counterReset: In
    * But only call it every 10,000th time to avoid bloated serialization streams (when
    * the stream 'resets' object class descriptions have to be re-written)
    */
-  def writeObject[T: ClassTag](t: T): SerializationStream = {
+  def writeObject[T](t: T): SerializationStream = {
     objOut.writeObject(t)
     if (counterReset > 0 && counter >= counterReset) {
       objOut.reset()
@@ -65,7 +65,7 @@ extends DeserializationStream {
 }
 
 private[spark] class JavaSerializerInstance(counterReset: Int) extends SerializerInstance {
-  def serialize[T: ClassTag](t: T): ByteBuffer = {
+  def serialize[T](t: T): ByteBuffer = {
     val bos = new ByteArrayOutputStream()
     val out = serializeStream(bos)
     out.writeObject(t)
@@ -73,13 +73,13 @@ private[spark] class JavaSerializerInstance(counterReset: Int) extends Serialize
     ByteBuffer.wrap(bos.toByteArray)
   }
 
-  def deserialize[T: ClassTag](bytes: ByteBuffer): T = {
+  def deserialize[T](bytes: ByteBuffer): T = {
     val bis = new ByteBufferInputStream(bytes)
     val in = deserializeStream(bis)
     in.readObject().asInstanceOf[T]
   }
 
-  def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T = {
+  def deserialize[T](bytes: ByteBuffer, loader: ClassLoader): T = {
     val bis = new ByteBufferInputStream(bytes)
     val in = deserializeStream(bis, loader)
     in.readObject().asInstanceOf[T]

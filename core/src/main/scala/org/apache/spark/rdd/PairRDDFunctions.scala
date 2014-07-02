@@ -51,8 +51,7 @@ import org.apache.spark.serializer.Serializer
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
  * Import `org.apache.spark.SparkContext._` at the top of your program to use these functions.
  */
-class PairRDDFunctions[K, V](self: RDD[(K, V)])
-    (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null)
+class PairRDDFunctions[K, V](self: RDD[(K, V)])(implicit ord: Ordering[K] = null)
   extends Logging
   with SparkHadoopMapReduceUtil
   with Serializable
@@ -75,9 +74,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       mergeCombiners: (C, C) => C,
       partitioner: Partitioner,
       mapSideCombine: Boolean = true,
-      serializer: Serializer = null): RDD[(K, C)] = {
+      serializer: Serializer = null)(implicit keyClassTag: ClassTag[K], ev: String =:= C): RDD[(K, C)] = {
     require(mergeCombiners != null, "mergeCombiners must be defined") // required as of Spark 0.9.0
-    if (keyClass.isArray) {
+    if (keyClassTag.runtimeClass.isArray) {
       if (mapSideCombine) {
         throw new SparkException("Cannot use map-side combining with array keys.")
       }
@@ -97,6 +96,15 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
         .setMapSideCombine(mapSideCombine)
     }
   }
+
+      // FIXME
+//  class NonArrayPairRDDFunctions[K =:= Array , V](self: RDD[(K, V)])(implicit ord: Ordering[K] = null)
+//    extends Logging
+//    with SparkHadoopMapReduceUtil
+//    with Serializable
+//  {
+//
+//  }
 
   /**
    * Simplified version of combineByKey that hash-partitions the output RDD.
@@ -691,15 +699,15 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
    * RDD will be <= us.
    */
-  def subtractByKey[W: ClassTag](other: RDD[(K, W)]): RDD[(K, V)] =
+  def subtractByKey[W](other: RDD[(K, W)]): RDD[(K, V)] =
     subtractByKey(other, self.partitioner.getOrElse(new HashPartitioner(self.partitions.size)))
 
   /** Return an RDD with the pairs from `this` whose keys are not in `other`. */
-  def subtractByKey[W: ClassTag](other: RDD[(K, W)], numPartitions: Int): RDD[(K, V)] =
+  def subtractByKey[W](other: RDD[(K, W)], numPartitions: Int): RDD[(K, V)] =
     subtractByKey(other, new HashPartitioner(numPartitions))
 
   /** Return an RDD with the pairs from `this` whose keys are not in `other`. */
-  def subtractByKey[W: ClassTag](other: RDD[(K, W)], p: Partitioner): RDD[(K, V)] =
+  def subtractByKey[W](other: RDD[(K, W)], p: Partitioner): RDD[(K, V)] =
     new SubtractedRDD[K, V, W](self, other, p)
 
   /**
@@ -947,9 +955,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def values: RDD[V] = self.map(_._2)
 
-  private[spark] def keyClass: Class[_] = kt.runtimeClass
-
-  private[spark] def valueClass: Class[_] = vt.runtimeClass
+//  private[spark] def keyClass: Class[_] = kt.runtimeClass
+//
+//  private[spark] def valueClass: Class[_] = vt.runtimeClass
 
   private[spark] def keyOrdering: Option[Ordering[K]] = Option(ord)
 }

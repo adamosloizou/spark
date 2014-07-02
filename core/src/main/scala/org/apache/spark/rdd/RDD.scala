@@ -72,7 +72,7 @@ import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, SamplingU
  * [[http://www.cs.berkeley.edu/~matei/papers/2012/nsdi_spark.pdf Spark paper]] for more details
  * on RDD internals.
  */
-abstract class RDD[T: ClassTag](
+abstract class RDD[T](
     @transient private var sc: SparkContext,
     @transient private var deps: Seq[Dependency[_]]
   ) extends Serializable with Logging {
@@ -266,13 +266,13 @@ abstract class RDD[T: ClassTag](
   /**
    * Return a new RDD by applying a function to all elements of this RDD.
    */
-  def map[U: ClassTag](f: T => U): RDD[U] = new MappedRDD(this, sc.clean(f))
+  def map[U](f: T => U): RDD[U] = new MappedRDD(this, sc.clean(f))
 
   /**
    *  Return a new RDD by first applying a function to all elements of this
    *  RDD, and then flattening the results.
    */
-  def flatMap[U: ClassTag](f: T => TraversableOnce[U]): RDD[U] =
+  def flatMap[U](f: T => TraversableOnce[U]): RDD[U] =
     new FlatMappedRDD(this, sc.clean(f))
 
   /**
@@ -388,18 +388,18 @@ abstract class RDD[T: ClassTag](
    */
   def takeSample(withReplacement: Boolean,
       num: Int,
-      seed: Long = Utils.random.nextLong): Array[T] = {
+      seed: Long = Utils.random.nextLong): Seq[T] = {
     val numStDev =  10.0
 
     if (num < 0) {
       throw new IllegalArgumentException("Negative number of elements requested")
     } else if (num == 0) {
-      return new Array[T](0)
+      return Seq.empty
     }
 
     val initialCount = this.count()
     if (initialCount == 0) {
-      return new Array[T](0)
+      return Seq.empty
     }
 
     val maxSampleSize = Int.MaxValue - (numStDev * math.sqrt(Int.MaxValue)).toInt
@@ -448,8 +448,7 @@ abstract class RDD[T: ClassTag](
   def sortBy[K](
       f: (T) => K,
       ascending: Boolean = true,
-      numPartitions: Int = this.partitions.size)
-      (implicit ord: Ordering[K], ctag: ClassTag[K]): RDD[T] =
+      numPartitions: Int = this.partitions.size)(implicit ord: Ordering[K]): RDD[T] =
     this.keyBy[K](f)
         .sortByKey(ascending, numPartitions)
         .values
@@ -504,7 +503,7 @@ abstract class RDD[T: ClassTag](
    * Return the Cartesian product of this RDD and another one, that is, the RDD of all pairs of
    * elements (a, b) where a is in `this` and b is in `other`.
    */
-  def cartesian[U: ClassTag](other: RDD[U]): RDD[(T, U)] = new CartesianRDD(sc, this, other)
+  def cartesian[U](other: RDD[U]): RDD[(T, U)] = new CartesianRDD(sc, this, other)
 
   /**
    * Return an RDD of grouped items. Each group consists of a key and a sequence of elements
@@ -585,7 +584,7 @@ abstract class RDD[T: ClassTag](
    * Return a new RDD by applying a function to each partition of this RDD, while tracking the index
    * of the original partition.
    */
-  def mapPartitionsWithIndex[U: ClassTag](
+  def mapPartitionsWithIndex[U](
       f: (Int, Iterator[T]) => Iterator[U], preservesPartitioning: Boolean = false): RDD[U] = {
     val func = (context: TaskContext, index: Int, iter: Iterator[T]) => f(index, iter)
     new MapPartitionsRDD(this, sc.clean(func), preservesPartitioning)
@@ -746,9 +745,9 @@ abstract class RDD[T: ClassTag](
   /**
    * Return an array that contains all of the elements in this RDD.
    */
-  def collect(): Array[T] = {
-    val results = sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
-    Array.concat(results: _*)
+  def collect(): ArrayBuffer[T] = {
+    val results = sc.runJob(this, (iter: Iterator[T]) => iter.toBuffer)
+    ArrayBuffer.concat(results: _*)
   }
 
   /**
@@ -757,8 +756,8 @@ abstract class RDD[T: ClassTag](
    * The iterator will consume as much memory as the largest partition in this RDD.
    */
   def toLocalIterator: Iterator[T] = {
-    def collectPartition(p: Int): Array[T] = {
-      sc.runJob(this, (iter: Iterator[T]) => iter.toArray, Seq(p), allowLocal = false).head
+    def collectPartition(p: Int): Seq[T] = {
+      sc.runJob(this, (iter: Iterator[T]) => iter.toBuffer, Seq(p), allowLocal = false).head
     }
     (0 until partitions.length).iterator.flatMap(i => collectPartition(i))
   }
@@ -767,7 +766,7 @@ abstract class RDD[T: ClassTag](
    * Return an array that contains all of the elements in this RDD.
    */
   @deprecated("use collect", "1.0.0")
-  def toArray(): Array[T] = collect()
+  def toArray(): Seq[T] = collect()
 
   /**
    * Return an RDD that contains all matching values by applying `f`.
@@ -902,7 +901,8 @@ abstract class RDD[T: ClassTag](
    * Return the count of each unique value in this RDD as a map of (value, count) pairs. The final
    * combine step happens locally on the master, equivalent to running a single reduce task.
    */
-  def countByValue()(implicit ord: Ordering[T] = null): Map[T, Long] = {
+  def countByValue()
+                  (implicit ord: Ordering[T] = null, elementClassTag: ClassTag[T]): Map[T, Long] = {
     if (elementClassTag.runtimeClass.isArray) {
       throw new SparkException("countByValue() does not support arrays")
     }
@@ -933,7 +933,7 @@ abstract class RDD[T: ClassTag](
    */
   @Experimental
   def countByValueApprox(timeout: Long, confidence: Double = 0.95)
-      (implicit ord: Ordering[T] = null)
+      (implicit ord: Ordering[T] = null, elementClassTag: ClassTag[T])
       : PartialResult[Map[T, BoundedDouble]] =
   {
     if (elementClassTag.runtimeClass.isArray) {
@@ -1027,9 +1027,9 @@ abstract class RDD[T: ClassTag](
    * results from that partition to estimate the number of additional partitions needed to satisfy
    * the limit.
    */
-  def take(num: Int): Array[T] = {
+  def take(num: Int): Seq[T] = {
     if (num == 0) {
-      return new Array[T](0)
+      return Seq.empty
     }
 
     val buf = new ArrayBuffer[T]
@@ -1053,20 +1053,20 @@ abstract class RDD[T: ClassTag](
 
       val left = num - buf.size
       val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
-      val res = sc.runJob(this, (it: Iterator[T]) => it.take(left).toArray, p, allowLocal = true)
+      val res = sc.runJob(this, (it: Iterator[T]) => it.take(left).toBuffer, p, allowLocal = true)
 
       res.foreach(buf ++= _.take(num - buf.size))
       partsScanned += numPartsToTry
     }
 
-    buf.toArray
+    buf
   }
 
   /**
    * Return the first element in this RDD.
    */
   def first(): T = take(1) match {
-    case Array(t) => t
+    case Seq(t) => t
     case _ => throw new UnsupportedOperationException("empty collection")
   }
 
@@ -1085,7 +1085,7 @@ abstract class RDD[T: ClassTag](
    * @param ord the implicit ordering for T
    * @return an array of top elements
    */
-  def top(num: Int)(implicit ord: Ordering[T]): Array[T] = takeOrdered(num)(ord.reverse)
+  def top(num: Int)(implicit ord: Ordering[T]): Seq[T] = takeOrdered(num)(ord.reverse)
 
   /**
    * Returns the first K (smallest) elements from this RDD as defined by the specified
@@ -1103,7 +1103,7 @@ abstract class RDD[T: ClassTag](
    * @param ord the implicit ordering for T
    * @return an array of top elements
    */
-  def takeOrdered(num: Int)(implicit ord: Ordering[T]): Array[T] = {
+  def takeOrdered(num: Int)(implicit ord: Ordering[T]): Seq[T] = {
     mapPartitions { items =>
       // Priority keeps the largest elements, so let's reverse the ordering.
       val queue = new BoundedPriorityQueue[T](num)(ord.reverse)
@@ -1112,7 +1112,7 @@ abstract class RDD[T: ClassTag](
     }.reduce { (queue1, queue2) =>
       queue1 ++= queue2
       queue1
-    }.toArray.sorted(ord)
+    }.toBuffer.sorted(ord)
   }
 
   /**
@@ -1147,7 +1147,7 @@ abstract class RDD[T: ClassTag](
    * Save this RDD as a SequenceFile of serialized objects.
    */
   def saveAsObjectFile(path: String) {
-    this.mapPartitions(iter => iter.grouped(10).map(_.toArray))
+    this.mapPartitions(iter => iter.grouped(10).map(_.toIterator))
       .map(x => (NullWritable.get(), new BytesWritable(Utils.serialize(x))))
       .saveAsSequenceFile(path)
   }
@@ -1160,8 +1160,8 @@ abstract class RDD[T: ClassTag](
   }
 
   /** A private method for tests, to look at the contents of each partition */
-  private[spark] def collectPartitions(): Array[Array[T]] = {
-    sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
+  private[spark] def collectPartitions(): Array[Iterator[T]] = {
+    sc.runJob(this, (iter: Iterator[T]) => iter)
   }
 
   /**
@@ -1204,12 +1204,10 @@ abstract class RDD[T: ClassTag](
   @transient private[spark] val creationSite = Utils.getCallSite
   private[spark] def getCreationSite: String = Option(creationSite).map(_.short).getOrElse("")
 
-  private[spark] def elementClassTag: ClassTag[T] = classTag[T]
-
   private[spark] var checkpointData: Option[RDDCheckpointData[T]] = None
 
   /** Returns the first parent RDD */
-  protected[spark] def firstParent[U: ClassTag] = {
+  protected[spark] def firstParent[U] = {
     dependencies.head.rdd.asInstanceOf[RDD[U]]
   }
 
@@ -1268,6 +1266,7 @@ abstract class RDD[T: ClassTag](
     Option(name).map(_ + " ").getOrElse(""), getClass.getSimpleName, id, getCreationSite)
 
   def toJavaRDD() : JavaRDD[T] = {
-    new JavaRDD(this)(elementClassTag)
+//    new JavaRDD(this)(elementClassTag)
+    null //FIXME
   }
 }

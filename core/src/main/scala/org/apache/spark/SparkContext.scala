@@ -1318,8 +1318,7 @@ object SparkContext extends Logging {
 
   // TODO: Add AccumulatorParams for other types, e.g. lists and strings
 
-  implicit def rddToPairRDDFunctions[K, V](rdd: RDD[(K, V)])
-      (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null) = {
+  implicit def rddToPairRDDFunctions[K, V](rdd: RDD[(K, V)])(implicit ord: Ordering[K] = null) = {
     new PairRDDFunctions(rdd)
   }
 

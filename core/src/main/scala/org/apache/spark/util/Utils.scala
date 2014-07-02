@@ -24,7 +24,7 @@ import java.util.{Locale, Random, UUID}
 import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadPoolExecutor}
 
 import scala.collection.JavaConversions._
-import scala.collection.Map
+import scala.collection.{mutable, Map}
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
@@ -438,15 +438,15 @@ private[spark] object Utils extends Logging {
    * result in a new collection. Unlike scala.util.Random.shuffle, this method
    * uses a local random number generator, avoiding inter-thread contention.
    */
-  def randomize[T: ClassTag](seq: TraversableOnce[T]): Seq[T] = {
-    randomizeInPlace(seq.toArray)
+  def randomize[T](seq: TraversableOnce[T]): Seq[T] = {
+    randomizeInPlace(seq.toBuffer)
   }
 
   /**
    * Shuffle the elements of an array into a random order, modifying the
    * original array. Returns the original array.
    */
-  def randomizeInPlace[T](arr: Array[T], rand: Random = new Random): Array[T] = {
+  def randomizeInPlace[T](arr: mutable.Buffer[T], rand: Random = new Random): mutable.Buffer[T] = {
     for (i <- (arr.length - 1) to 1 by -1) {
       val j = rand.nextInt(i)
       val tmp = arr(j)
@@ -918,7 +918,7 @@ private[spark] object Utils extends Logging {
   /**
    * Clone an object using a Spark serializer.
    */
-  def clone[T: ClassTag](value: T, serializer: SerializerInstance): T = {
+  def clone[T](value: T, serializer: SerializerInstance): T = {
     serializer.deserialize[T](serializer.serialize(value))
   }
 

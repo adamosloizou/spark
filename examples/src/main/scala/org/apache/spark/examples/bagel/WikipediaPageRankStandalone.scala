@@ -145,15 +145,15 @@ class WPRSerializer extends org.apache.spark.serializer.Serializer {
 }
 
 class WPRSerializerInstance extends SerializerInstance {
-  def serialize[T: ClassTag](t: T): ByteBuffer = {
+  def serialize[T](t: T): ByteBuffer = {
     throw new UnsupportedOperationException()
   }
 
-  def deserialize[T: ClassTag](bytes: ByteBuffer): T = {
+  def deserialize[T](bytes: ByteBuffer): T = {
     throw new UnsupportedOperationException()
   }
 
-  def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T = {
+  def deserialize[T](bytes: ByteBuffer, loader: ClassLoader): T = {
     throw new UnsupportedOperationException()
   }
 
@@ -169,7 +169,7 @@ class WPRSerializerInstance extends SerializerInstance {
 class WPRSerializationStream(os: OutputStream) extends SerializationStream {
   val dos = new DataOutputStream(os)
 
-  def writeObject[T: ClassTag](t: T): SerializationStream = t match {
+  def writeObject[T](t: T): SerializationStream = t match {
     case (id: String, wrapper: ArrayBuffer[_]) => wrapper(0) match {
       case links: Array[String] => {
         dos.writeInt(0) // links

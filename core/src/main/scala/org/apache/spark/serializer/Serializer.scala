@@ -65,11 +65,11 @@ object Serializer {
  */
 @DeveloperApi
 trait SerializerInstance {
-  def serialize[T: ClassTag](t: T): ByteBuffer
+  def serialize[T](t: T): ByteBuffer
 
-  def deserialize[T: ClassTag](bytes: ByteBuffer): T
+  def deserialize[T](bytes: ByteBuffer): T
 
-  def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T
+  def deserialize[T](bytes: ByteBuffer, loader: ClassLoader): T
 
   def serializeStream(s: OutputStream): SerializationStream
 
@@ -97,7 +97,7 @@ trait SerializerInstance {
  */
 @DeveloperApi
 trait SerializationStream {
-  def writeObject[T: ClassTag](t: T): SerializationStream
+  def writeObject[T](t: T): SerializationStream
   def flush(): Unit
   def close(): Unit
 
